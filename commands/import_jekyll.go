@@ -265,6 +265,7 @@ func (i *importCmd) loadJekyllConfig(fs afero.Fs, jekyllRoot string) map[string]
 func (i *importCmd) createConfigFromJekyll(fs afero.Fs, inpath string, kind string, jekyllConfig map[string]interface{}) (err error) {
 	title := "My New Hugo Site"
 	baseURL := "http://example.org/"
+	permalinks := make(map[string]string)
 
 	for key, value := range jekyllConfig {
 		lowerKey := strings.ToLower(key)
@@ -279,6 +280,11 @@ func (i *importCmd) createConfigFromJekyll(fs afero.Fs, inpath string, kind stri
 			if str, ok := value.(string); ok {
 				baseURL = str
 			}
+		case "permalink":
+			jww.ERROR.Printf("permalink: '%s'", value.(string))
+			if str, ok := value.(string); ok {
+				permalinks["post"] = str
+			}
 		}
 	}
 
@@ -287,6 +293,7 @@ func (i *importCmd) createConfigFromJekyll(fs afero.Fs, inpath string, kind stri
 		"title":              title,
 		"languageCode":       "en-us",
 		"disablePathToLower": true,
+		"permalinks":         permalinks,
 	}
 	kind = parser.FormatSanitize(kind)
 
@@ -428,6 +435,9 @@ func convertJekyllPost(s *hugolib.Site, path, relPath, targetDir string, draft b
 
 	filename := filepath.Base(path)
 	postDate, postName, err := parseJekyllFilename(filename)
+	jww.ERROR.Printf("Filename: '%s', postDate: %s, postName: %s", filename, postDate.Format("2006-01-02"), postName)
+	jekyllURL := "/blog/" + strings.Replace(postDate.Format("2006-01-02"), "-", "/", -1) + "/" + postName
+	jww.ERROR.Printf("URL: '%s'", jekyllURL)
 	if err != nil {
 		jww.WARN.Printf("Failed to parse filename '%s': %s. Skipping.", filename, err)
 		return nil
@@ -457,7 +467,7 @@ func convertJekyllPost(s *hugolib.Site, path, relPath, targetDir string, draft b
 		return err
 	}
 
-	newmetadata, err := convertJekyllMetaData(metadata, postName, postDate, draft)
+	newmetadata, err := convertJekyllMetaData(metadata, postName, postDate, draft, jekyllURL)
 	if err != nil {
 		jww.ERROR.Println("Convert metadata error:", path)
 		return err
@@ -481,7 +491,7 @@ func convertJekyllPost(s *hugolib.Site, path, relPath, targetDir string, draft b
 	return nil
 }
 
-func convertJekyllMetaData(m interface{}, postName string, postDate time.Time, draft bool) (interface{}, error) {
+func convertJekyllMetaData(m interface{}, postName string, postDate time.Time, draft bool, jekyllURL string) (interface{}, error) {
 	metadata, err := cast.ToStringMapE(m)
 	if err != nil {
 		return nil, err
@@ -528,7 +538,12 @@ func convertJekyllMetaData(m interface{}, postName string, postDate time.Time, d
 
 	}
 
-	metadata["date"] = postDate.Format(time.RFC3339)
+	// metadata["date"] = postDate.Format(time.RFC3339)
+	metadata["date"] = postDate.Format("2006-01-02")
+	// metadata["slug"] = jekyllURL
+	metadata["aliases"] = []string{jekyllURL}
+
+	jww.ERROR.Printf("aliases: '%s'", metadata["aliases"])
 
 	return metadata, nil
 }
